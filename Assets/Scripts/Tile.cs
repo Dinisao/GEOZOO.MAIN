@@ -7,12 +7,28 @@ public class Tile : MonoBehaviour
     public int currentCell = -1; // índice da célula (-1 = fora da grid)
     public bool isFlipped = false; // false = frente, true = verso
 
+    [Header("Sprites da Tile")]
+    public Sprite frontSprite; // Imagem da frente
+    public Sprite backSprite;  // Imagem do verso
+
+    private SpriteRenderer spriteRenderer;
     private Vector3 previousPosition;
 
     void Start()
     {
         gridManager = FindObjectOfType<GridManager>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
         previousPosition = transform.position;
+
+        // Define a imagem inicial (frente)
+        if (spriteRenderer != null && frontSprite != null)
+        {
+            spriteRenderer.sprite = frontSprite;
+        }
+        else if (spriteRenderer == null)
+        {
+            Debug.LogError("❌ " + gameObject.name + " não tem SpriteRenderer!");
+        }
     }
 
     public void RotateTile()
@@ -26,12 +42,20 @@ public class Tile : MonoBehaviour
     {
         isFlipped = !isFlipped;
 
-        // Vira visualmente no eixo X
-        Vector3 scale = transform.localScale;
-        scale.x *= -1;
-        transform.localScale = scale;
-
-        Debug.Log(isFlipped ? "🔄 Tile virada (verso)" : "🔄 Tile normal (frente)");
+        // Troca a imagem entre frente e verso
+        if (spriteRenderer != null)
+        {
+            if (isFlipped && backSprite != null)
+            {
+                spriteRenderer.sprite = backSprite;
+                Debug.Log("🔄 " + gameObject.name + " virada (verso)");
+            }
+            else if (!isFlipped && frontSprite != null)
+            {
+                spriteRenderer.sprite = frontSprite;
+                Debug.Log("🔄 " + gameObject.name + " normal (frente)");
+            }
+        }
     }
 
     public bool MoveTile(Vector2 position)
