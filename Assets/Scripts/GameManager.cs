@@ -1,116 +1,148 @@
 ﻿using UnityEngine;
-using TMPro; // TextMeshPro
 
 public class GameManager : MonoBehaviour
 {
-    [Header("Animais")]
-    public GameObject[] animalCards;
-    public Transform cardSpawnPoint;
+    private static GameManager _instance;
+    public static GameManager Instance
+    {
+        get
+        {
+            if (_instance == null) _instance = FindObjectOfType<GameManager>();
+            return _instance;
+        }
+    }
 
-    [Header("Tiles do Jogador")]
-    public Tile[] playerTiles;
+    [Header("Configurações do Jogo")]
+    public int currentLevel = 0;
+    public int totalScore = 0;
+    public int scorePerCorrect = 10;
+
+    [Header("Configurações de Níveis (Opcional)")]
+    public TileData[][] puzzleConfigs;
 
     [Header("UI")]
-    public TextMeshProUGUI scoreText;
-    public TextMeshProUGUI timerText;
+    public TMPro.TextMeshProUGUI scoreText;
 
-    private float timer;
-    private bool gameRunning;
-    private int score;
-    private AnimalSolution currentSolution;
+    private int lastScore = -1;
+    private AnimalSolution animalSolution;
+    private GridManager gridManager;
+
+    void Awake()
+    {
+        if (_instance == null)
+        {
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else if (_instance != this)
+        {
+            Destroy(gameObject);
+        }
+    }
 
     void Start()
     {
-        // Verificações de segurança
-        if (animalCards.Length == 0)
+        animalSolution = AnimalSolution.Instance;
+        gridManager = GridManager.Instance;
+
+        if (animalSolution == null || gridManager == null)
         {
-            Debug.LogError("❌ Nenhum animal configurado! Adiciona prefabs no campo AnimalCards.");
+            Debug.LogError("❌ AnimalSolution ou GridManager não encontrado!");
             return;
         }
 
-        if (playerTiles.Length != 4)
+        if (puzzleConfigs != null && currentLevel < puzzleConfigs.Length)
         {
-            Debug.LogError("❌ Precisas de exatamente 4 tiles no campo PlayerTiles!");
+            animalSolution.expectedTiles = puzzleConfigs[currentLevel];
+        }
+
+        totalScore = PlayerPrefs.GetInt("TotalScore", 0);
+        UpdateScoreUI();
+
+    }
+
+    private void UpdateScoreUI()
+    {
+        if (scoreText != null && lastScore != totalScore)
+        {
+            scoreText.text = totalScore.ToString();
+            lastScore = totalScore;
+        }
+    }
+
+    public void AddScore(int points)
+    {
+        if (points <= 0) return;
+
+        totalScore += points;
+        UpdateScoreUI();
+        PlayerPrefs.SetInt("TotalScore", totalScore);
+
+        CheckPuzzleComplete();
+    }
+
+    public void CheckPuzzleComplete()
+    {
+        if (animalSolution == null) return;
+
+        if (animalSolution.IsPuzzleComplete())
+        {
+            Debug.Log("🏆 VITÓRIA! Puzzle do Nível " + currentLevel + " completo. Score final: " + totalScore);
+
+            int bonus = scorePerCorrect * animalSolution.expectedTiles.Length;
+            totalScore += bonus;
+            UpdateScoreUI();
+            Debug.Log("🎁 Bônus de conclusão: +" + bonus);
+
+            Invoke(nameof(LoadNextLevel), 2f);
+        }
+    }
+
+    public void LoadLevel(int levelIndex)
+    {
+        if (puzzleConfigs == null || levelIndex >= puzzleConfigs.Length)
+        {
+            Debug.LogWarning("⚠️ Configuração para Nível " + levelIndex + " não encontrada!");
             return;
         }
 
-        StartNewRound();
+        currentLevel = levelIndex;
+        animalSolution.expectedTiles = puzzleConfigs[levelIndex];
+        animalSolution.ResetUsedIds();
+        ResetGrid();
+
+        Debug.Log("🔄 Nível " + currentLevel + " carregado com " + puzzleConfigs[levelIndex].Length + " tiles esperadas.");
     }
 
-    void Update()
+    public void LoadNextLevel()
     {
-        if (gameRunning)
-        {
-            timer += Time.deltaTime;
-            if (timerText != null)
-                timerText.text = "Tempo: " + timer.ToString("F2") + "s";
-            CheckSolution();
-        }
+        LoadLevel(currentLevel + 1);
     }
 
-    void StartNewRound()
+    public void ResetGame()
     {
-        timer = 0;
-        gameRunning = true;
+        totalScore = 0;
+        animalSolution.ResetUsedIds();
+        ResetGrid();
+        UpdateScoreUI();
+        Debug.Log("🔄 Jogo resetado. Score zerado.");
+    }
 
-        // Destruir carta anterior
-        if (cardSpawnPoint != null)
+    private void ResetGrid()
+    {
+        if (gridManager != null)
         {
-            foreach (Transform child in cardSpawnPoint)
+            int totalCells = gridManager.columns * gridManager.rows;
+            for (int i = 0; i < totalCells; i++)
             {
-                Destroy(child.gameObject);
+                gridManager.FreeCell(i);
             }
         }
-
-        // Verificar se há animais disponíveis
-        if (animalCards.Length == 0)
-        {
-            Debug.LogError("❌ Sem animais para spawnar!");
-            return;
-        }
-
-        // Escolher carta aleatória
-        int index = Random.Range(0, animalCards.Length);
-        GameObject card = Instantiate(animalCards[index], cardSpawnPoint.position, Quaternion.identity, cardSpawnPoint);
-
-        currentSolution = card.GetComponent<AnimalSolution>();
-        if (currentSolution == null)
-        {
-            Debug.LogError("❌ O prefab " + animalCards[index].name + " não tem AnimalSolution!");
-        }
     }
 
-    void CheckSolution()
+    void OnDestroy()
     {
-        if (currentSolution == null || currentSolution.expectedTiles == null) return;
-
-        if (currentSolution.expectedTiles.Length != playerTiles.Length)
-        {
-            Debug.LogError("❌ O número de expectedTiles não corresponde ao número de playerTiles!");
-            return;
-        }
-
-        bool correct = true;
-        for (int i = 0; i < playerTiles.Length; i++)
-        {
-            if (!playerTiles[i].IsCorrect(currentSolution.expectedTiles[i]))
-            {
-                correct = false;
-                break;
-            }
-        }
-
-        if (correct)
-        {
-            gameRunning = false;
-            int points = Mathf.Max(100 - Mathf.RoundToInt(timer * 10), 10);
-            score += points;
-
-            if (scoreText != null)
-                scoreText.text = "Score: " + score;
-
-            Debug.Log("✅ Puzzle completo! +" + points + " pontos");
-            Invoke("StartNewRound", 2f);
-        }
+        if (_instance == this)
+            PlayerPrefs.SetInt("TotalScore", totalScore);
     }
 }

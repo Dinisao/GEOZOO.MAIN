@@ -2,6 +2,17 @@
 
 public class GridManager : MonoBehaviour
 {
+    private static GridManager _instance; // Singleton para acesso global
+    public static GridManager Instance
+    {
+        get
+        {
+            if (_instance == null) _instance = FindObjectOfType<GridManager>();
+            return _instance;
+        }
+    }
+
+    [Header("Configurações do Grid")]
     public int columns = 3;
     public int rows = 4;
     public float cellSize = 2f;
@@ -12,8 +23,26 @@ public class GridManager : MonoBehaviour
 
     void Awake()
     {
+        if (_instance == null)
+        {
+            _instance = this;
+            DontDestroyOnLoad(gameObject); // Opcional: persiste entre cenas
+        }
+        else if (_instance != this)
+        {
+            Destroy(gameObject); // Evita múltiplas instâncias
+        }
+
+        // Validação de dimensões para evitar grids inválidos
+        if (columns <= 0 || rows <= 0)
+        {
+            columns = Mathf.Max(1, columns);
+            rows = Mathf.Max(1, rows);
+            Debug.LogWarning("⚠️ Dimensões do grid ajustadas para valores mínimos: " + columns + "x" + rows);
+        }
+
         occupiedCells = new Tile[columns * rows];
-        Debug.Log("✅ GridManager iniciado: " + occupiedCells.Length + " células disponíveis");
+        Debug.Log("✅ GridManager iniciado: " + occupiedCells.Length + " células disponíveis (" + columns + "x" + rows + ")");
     }
 
     public Vector2 GetNearestCell(Vector2 position)
@@ -44,7 +73,11 @@ public class GridManager : MonoBehaviour
     // Verifica se uma célula está ocupada
     public bool IsCellOccupied(int cellIndex)
     {
-        if (cellIndex < 0 || cellIndex >= occupiedCells.Length) return false;
+        if (cellIndex < 0 || cellIndex >= occupiedCells.Length)
+        {
+            Debug.LogError("❌ Índice de célula inválido em IsCellOccupied: " + cellIndex);
+            return false; // Tratar como livre para evitar crashes, mas logar erro
+        }
 
         bool occupied = occupiedCells[cellIndex] != null;
 
@@ -65,14 +98,14 @@ public class GridManager : MonoBehaviour
     {
         if (cellIndex < 0 || cellIndex >= occupiedCells.Length)
         {
-            Debug.LogError("❌ Índice de célula inválido: " + cellIndex);
+            Debug.LogError("❌ Índice de célula inválido em OccupyCell: " + cellIndex);
             return false;
         }
 
-        // Se já está ocupada por OUTRA tile, retorna falso
+        // Se já está ocupada por OUTRA tile, retorna falso (reforçado)
         if (occupiedCells[cellIndex] != null && occupiedCells[cellIndex] != tile)
         {
-            Debug.Log("❌ Célula " + cellIndex + " já está ocupada por " + occupiedCells[cellIndex].name);
+            Debug.Log("❌ Célula " + cellIndex + " já está ocupada por " + occupiedCells[cellIndex].name + ". Não pode colocar " + tile.name);
             return false;
         }
 
@@ -92,5 +125,52 @@ public class GridManager : MonoBehaviour
             }
             occupiedCells[cellIndex] = null;
         }
+        else
+        {
+            Debug.LogWarning("⚠️ Tentativa de liberar célula inválida: " + cellIndex);
+        }
+    }
+
+    // Método: Retorna a Tile ocupando uma célula específica (usado por AnimalSolution)
+    public Tile GetTileInCell(int cellIndex)
+    {
+        if (cellIndex < 0 || cellIndex >= occupiedCells.Length)
+        {
+            Debug.LogWarning("⚠️ Índice de célula inválido em GetTileInCell: " + cellIndex);
+            return null;
+        }
+
+        Tile tile = occupiedCells[cellIndex];
+        if (tile != null)
+        {
+            Debug.Log("🔍 Tile em célula " + cellIndex + ": " + tile.name + " (ID: " + tile.GetCurrentId() + ")");
+        }
+        else
+        {
+            Debug.Log("🔍 Célula " + cellIndex + " vazia.");
+        }
+
+        return tile;
+    }
+
+    // Opcional: Método para resetar todo o grid (libera todas as células)
+    public void ResetAllCells()
+    {
+        for (int i = 0; i < occupiedCells.Length; i++)
+        {
+            FreeCell(i);
+        }
+        Debug.Log("🧹 Todo o grid resetado: " + occupiedCells.Length + " células liberadas.");
+    }
+
+    // Opcional: Getter para total de células ocupadas (para debug)
+    public int GetOccupiedCount()
+    {
+        int count = 0;
+        foreach (var tile in occupiedCells)
+        {
+            if (tile != null) count++;
+        }
+        return count;
     }
 }

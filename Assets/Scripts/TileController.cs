@@ -35,7 +35,7 @@ public class TileController : MonoBehaviour
 
     void OnMouseDown()
     {
-        if (tile == null || cam == null) return;
+        if (tile == null || cam == null || tile.isMoving) return; // Não inicia drag se em movimento
 
         // Clique esquerdo - arrastar
         if (Input.GetMouseButtonDown(0))
@@ -44,12 +44,13 @@ public class TileController : MonoBehaviour
             Vector3 mousePos = cam.ScreenToWorldPoint(Input.mousePosition);
             mousePos.z = 0;
             dragOffset = transform.position - mousePos;
+            Debug.Log("🖱️ Iniciando drag da Tile " + (tile != null ? tile.tileId : "desconhecida"));
         }
     }
 
     void OnMouseOver()
     {
-        if (tile == null) return;
+        if (tile == null || tile.isMoving) return; // Ignora interações durante movimento
 
         // Clique direito - rotacionar (tem que estar com o mouse em cima)
         if (Input.GetMouseButtonDown(1))
@@ -66,21 +67,40 @@ public class TileController : MonoBehaviour
 
     void OnMouseDrag()
     {
-        if (cam == null || !isDragging) return;
+        if (cam == null || !isDragging || tile == null) return;
 
         Vector3 mousePos = cam.ScreenToWorldPoint(Input.mousePosition);
         mousePos.z = 0;
+
+        // Opcional: Snap durante drag para evitar sobreposições visuais (descomente para ativar)
+        // Vector2 snappedPos = tile.gridManager.GetNearestCell(new Vector2(mousePos.x + dragOffset.x, mousePos.y + dragOffset.y));
+        // transform.position = new Vector3(snappedPos.x, snappedPos.y, 0);
+
+        // Movimento livre (padrão)
         transform.position = mousePos + dragOffset;
     }
 
     void OnMouseUp()
     {
-        if (tile == null || cam == null) return;
+        if (tile == null || cam == null || !isDragging) return;
 
-        if (isDragging && Input.GetMouseButtonUp(0))
+        if (Input.GetMouseButtonUp(0))
         {
             Vector3 mousePos = cam.ScreenToWorldPoint(Input.mousePosition);
-            tile.MoveTile(new Vector2(mousePos.x, mousePos.y));
+            mousePos.z = 0;
+
+            // Chama MoveTile com verificações de ocupação
+            bool success = tile.MoveTile(new Vector2(mousePos.x, mousePos.y));
+
+            if (!success)
+            {
+                Debug.Log("❌ Drag finalizado sem sucesso para Tile " + tile.tileId);
+            }
+            else
+            {
+                Debug.Log("✅ Drag finalizado com sucesso para Tile " + tile.tileId);
+            }
+
             isDragging = false;
         }
     }
