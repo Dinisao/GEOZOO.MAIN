@@ -705,8 +705,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   currentLevel: 0
   totalScore: 0
-  scorePerCorrect: 10
-  scoreText: {fileID: 0}
+  scorePerCorrect: 1
+  scoreTextTMP: {fileID: 2114739796}
+  tilePrefab: {fileID: 0}
+  initialSpawnPositions: []
 --- !u!4 &959938054
 Transform:
   m_ObjectHideFlags: 0

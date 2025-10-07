@@ -1,5 +1,5 @@
-﻿using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
+using System.Collections.Generic;
 
 public class AnimalSolution : MonoBehaviour
 {
@@ -13,10 +13,12 @@ public class AnimalSolution : MonoBehaviour
         }
     }
 
-    [Header("Configuração do Puzzle")]
-    public TileData[] expectedTiles; // Array de expectativas por célula - ACESSÍVEL NO INSPECTOR E GAME MANAGER
+    [Header("Configurações do Puzzle")]
+    public TileData[] expectedTiles; // Array de tiles esperadas (configure no Inspector!)
+    [Header("Tracking de IDs Usados (Auto-gerenciado)")]
+    public List<int> usedIds = new List<int>(); // IDs já usados (para evitar duplicatas)
 
-    private Dictionary<int, bool> usedIds = new Dictionary<int, bool>(); // Rastreia IDs usados para evitar duplicatas
+    private GridManager gridManager;
 
     void Awake()
     {
@@ -30,104 +32,166 @@ public class AnimalSolution : MonoBehaviour
             Destroy(gameObject); // Evita múltiplas instâncias
         }
 
-        // Validação: Garante que expectedTiles tenha tamanho válido
-        if (expectedTiles == null || expectedTiles.Length == 0)
+        gridManager = GridManager.Instance;
+        if (gridManager == null)
         {
-            Debug.LogWarning("⚠️ expectedTiles vazio em AnimalSolution. Configure no Inspector!");
+            Debug.LogError("❌ GridManager não encontrado para AnimalSolution!");
+        }
+
+        // Inicializa usedIds vazia
+        usedIds.Clear();
+        Debug.Log("✅ AnimalSolution inicializado com " + (expectedTiles != null ? expectedTiles.Length : 0) + " tiles esperadas. UsedIds vazia.");
+
+        // **DEBUG SCORE: Log das expectedTiles para verificação**
+        if (expectedTiles != null && expectedTiles.Length > 0)
+        {
+            for (int i = 0; i < expectedTiles.Length; i++)
+            {
+                TileData td = expectedTiles[i];
+                Debug.Log("🔍 [DEBUG SCORE] ExpectedTile[" + i + "]: ID=" + td.requiredTileId + ", Cell=" + td.correctCell +
+                          ", Flip=" + td.isFlipped + ", Rot=" + td.correctRotation + ", IgnoreFlip=" + td.ignoreFlip +
+                          ", AllowDup=" + td.allowDuplicates);
+            }
         }
         else
         {
-            Debug.Log("✅ AnimalSolution inicializado com " + expectedTiles.Length + " tiles esperadas.");
-            foreach (var data in expectedTiles)
-            {
-                Debug.Log("🔍 Esperado: Célula " + data.correctCell + " com ID " + data.requiredTileId +
-                          ", Rotação " + data.correctRotation + ", Flip " + data.isFlipped +
-                          (data.allowDuplicates ? " (duplicatas OK)" : " (ID único)"));
-            }
+            Debug.LogError("❌ [DEBUG SCORE] expectedTiles é NULL ou vazio! Configure no Inspector para ativar score.");
         }
     }
 
-    // Verifica se a colocação da tile é correta baseada na sua currentCell
+    // Método chamado pelo Tile.MoveTile(): Verifica se esta tile está correta na posição atual
     public bool IsCorrectPlacement(Tile tile)
     {
-        if (tile == null || expectedTiles == null) return false;
-
-        // Encontra o TileData esperado para a currentCell da tile
-        TileData expected = GetExpectedForCell(tile.currentCell);
-        if (expected == null)
+        if (tile == null || expectedTiles == null || expectedTiles.Length == 0)
         {
-            Debug.LogWarning("⚠️ Nenhuma expectativa para célula " + tile.currentCell + ". Tile " + tile.tileId + " considerada incorreta.");
+            Debug.LogError("❌ [DEBUG SCORE] Tile NULL ou expectedTiles vazio/inválido em IsCorrectPlacement!");
             return false;
         }
 
-        // Usa o método IsCorrect da Tile (com suporte a IDs por face, duplicatas, etc.)
-        bool isCorrect = tile.IsCorrect(expected);
+        // **DEBUG SCORE: Log entrada**
+        Debug.Log("🔍 [DEBUG SCORE] IsCorrectPlacement chamado para Tile " + tile.tileId + " (Instância #" + tile.GetInstanceId() +
+                  ", ID atual=" + tile.GetCurrentId() + ", Cell atual=" + tile.currentCell + ", Flip atual=" + tile.isFlipped +
+                  ", Rot atual=" + tile.currentRotation + ")");
 
-        // Se correto e rastreia uso, marca o ID como usado
-        if (isCorrect && tile.trackUsedId && !usedIds.ContainsKey(tile.GetCurrentId()))
+        // Encontra o TileData esperado para a célula atual da tile
+        TileData matchingExpected = null;
+        foreach (TileData expected in expectedTiles)
         {
-            usedIds[tile.GetCurrentId()] = true;
-            Debug.Log("✅ ID " + tile.GetCurrentId() + " marcado como usado após colocação correta.");
+            if (expected.correctCell == tile.currentCell)
+            {
+                matchingExpected = expected;
+                break;
+            }
+        }
+
+        if (matchingExpected == null)
+        {
+            Debug.LogError("❌ [DEBUG SCORE] Nenhuma TileData encontrada para célula " + tile.currentCell + "! ExpectedTiles tem " + expectedTiles.Length + " itens. Células esperadas: " +
+                           string.Join(", ", System.Array.ConvertAll(expectedTiles, e => e.correctCell.ToString())));
+            return false;
+        }
+
+        // **DEBUG SCORE: Log matching**
+        Debug.Log("🔍 [DEBUG SCORE] Matching encontrado para célula " + tile.currentCell + ": Expected ID=" + matchingExpected.requiredTileId +
+                  ", Flip=" + matchingExpected.isFlipped + ", Rot=" + matchingExpected.correctRotation + ", IgnoreFlip=" + matchingExpected.ignoreFlip +
+                  ", AllowDup=" + matchingExpected.allowDuplicates);
+
+        // Usa IsCorrect da tile para validar (ID, rotação, flip, duplicatas)
+        bool isCorrect = tile.IsCorrect(matchingExpected);
+
+        // **DEBUG SCORE: Log saída**
+        Debug.Log("🔍 [DEBUG SCORE] IsCorrect da tile retornou: " + isCorrect + " para Tile " + tile.tileId + " (Instância #" + tile.GetInstanceId() + ")");
+
+        // Se correto e trackUsedId, marca ID como usado (evita duplicatas)
+        if (isCorrect && tile.trackUsedId)
+        {
+            if (!usedIds.Contains(tile.GetCurrentId()))
+            {
+                usedIds.Add(tile.GetCurrentId());
+                Debug.Log("🔒 [DEBUG SCORE] ID " + tile.GetCurrentId() + " marcado como usado para Tile " + tile.tileId + " (Instância #" + tile.GetInstanceId() + "). UsedIds agora: " + usedIds.Count + " itens.");
+            }
+            else
+            {
+                Debug.LogWarning("⚠️ [DEBUG SCORE] ID " + tile.GetCurrentId() + " já estava usado - não adicionado novamente.");
+            }
         }
 
         return isCorrect;
     }
 
-    // Método auxiliar: Retorna o TileData esperado para uma célula específica
-    public TileData GetExpectedForCell(int cellIndex)
-    {
-        foreach (var data in expectedTiles)
-        {
-            if (data.correctCell == cellIndex)
-                return data;
-        }
-        return null; // Nenhuma expectativa para essa célula (ex.: célula vazia no puzzle)
-    }
-
-    // Checa se um ID já foi usado (para duplicatas)
-    public bool IsIdUsed(int id)
-    {
-        return usedIds.ContainsKey(id) && usedIds[id];
-    }
-
-    // Marca um ID como usado (chamado após colocação correta)
-    public void MarkIdAsUsed(int id)
-    {
-        if (!usedIds.ContainsKey(id))
-        {
-            usedIds[id] = true;
-            Debug.Log("✅ ID " + id + " marcado como usado (não pode ser reutilizado em duplicatas).");
-        }
-    }
-
-    // Opcional: Verifica se o puzzle inteiro está completo (agora usa GetTileInCell do GridManager)
+    // Método para checar se o puzzle inteiro está completo (chamado por GameManager)
     public bool IsPuzzleComplete()
     {
-        if (expectedTiles == null || expectedTiles.Length == 0) return false;
-
-        int correctCount = 0;
-        foreach (var data in expectedTiles)
+        if (expectedTiles == null || expectedTiles.Length == 0)
         {
-            // CORRIGIDO: Usa GridManager.Instance.GetTileInCell (linha ~109)
-            Tile tileInCell = GridManager.Instance.GetTileInCell(data.correctCell);
-            if (tileInCell != null && tileInCell.IsCorrect(data))
-                correctCount++;
+            Debug.LogWarning("⚠️ [DEBUG SCORE] expectedTiles vazio. Puzzle não pode ser completo.");
+            return false;
         }
-        bool complete = correctCount == expectedTiles.Length;
-        if (complete) Debug.Log("🎉 Puzzle completo! Todas as " + expectedTiles.Length + " tiles corretas.");
-        return complete;
+
+        bool allCorrect = true;
+        int checkedTiles = 0;
+
+        Debug.Log("🔍 [DEBUG SCORE] Verificando puzzle completo: " + expectedTiles.Length + " tiles esperadas.");
+
+        foreach (TileData expected in expectedTiles)
+        {
+            Tile tileInCell = gridManager.GetTileInCell(expected.correctCell);
+            if (tileInCell == null)
+            {
+                Debug.Log("❌ [DEBUG SCORE] Célula " + expected.correctCell + " vazia. Puzzle incompleto.");
+                allCorrect = false;
+                break;
+            }
+
+            // Verifica se a tile na célula é correta para esta expectativa
+            bool cellCorrect = tileInCell.IsCorrect(expected);
+            if (!cellCorrect)
+            {
+                Debug.Log("❌ [DEBUG SCORE] Tile em célula " + expected.correctCell + " (ID=" + tileInCell.GetCurrentId() +
+                          ", Flip=" + tileInCell.isFlipped + ") não é correta para expectativa ID=" + expected.requiredTileId +
+                          ", Cell=" + expected.correctCell + ", Flip=" + expected.isFlipped);
+                allCorrect = false;
+                break;
+            }
+
+            checkedTiles++;
+            Debug.Log("✅ [DEBUG SCORE] Célula " + expected.correctCell + " verificada: Correta (ID=" + expected.requiredTileId + ", Tile ID atual=" + tileInCell.GetCurrentId() + ")");
+        }
+
+        if (allCorrect)
+        {
+            Debug.Log("🎉 [DEBUG SCORE] Todas as " + checkedTiles + " tiles verificadas: Puzzle COMPLETO!");
+        }
+        else
+        {
+            Debug.Log("❌ [DEBUG SCORE] Puzzle incompleto: " + checkedTiles + "/" + expectedTiles.Length + " tiles OK.");
+        }
+
+        return allCorrect;
     }
 
-    // Opcional: Resetar tracking para novo nível
+    // Método para checar se um ID já foi usado (para duplicatas)
+    public bool IsIdUsed(int id)
+    {
+        bool used = usedIds.Contains(id);
+        Debug.Log("🔍 [DEBUG SCORE] Verificando ID " + id + ": Já usado? " + used + " (UsedIds: " + usedIds.Count + " itens).");
+        return used;
+    }
+
+    // Método para resetar IDs usados (chamado em LoadLevel ou Reset)
     public void ResetUsedIds()
     {
         usedIds.Clear();
-        Debug.Log("🔄 IDs usados resetados para novo puzzle.");
+        Debug.Log("🔄 [DEBUG SCORE] IDs usados resetados (lista vazia agora).");
     }
 
-    // Opcional: Getter para expectedTiles (se precisar acessar de fora)
-    public TileData[] GetExpectedTiles()
+    void OnDestroy()
     {
-        return expectedTiles;
+        if (gridManager != null)
+        {
+            // Opcional: Libera grid ao destruir
+            gridManager.ResetAllCells();
+            Debug.Log("🧹 [DEBUG SCORE] Grid resetado ao destruir AnimalSolution.");
+        }
     }
 }

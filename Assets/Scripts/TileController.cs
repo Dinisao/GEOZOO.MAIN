@@ -37,15 +37,12 @@ public class TileController : MonoBehaviour
     {
         if (tile == null || cam == null || tile.isMoving) return; // Não inicia drag se em movimento
 
-        // Clique esquerdo - arrastar
-        if (Input.GetMouseButtonDown(0))
-        {
-            isDragging = true;
-            Vector3 mousePos = cam.ScreenToWorldPoint(Input.mousePosition);
-            mousePos.z = 0;
-            dragOffset = transform.position - mousePos;
-            Debug.Log("🖱️ Iniciando drag da Tile " + (tile != null ? tile.tileId : "desconhecida"));
-        }
+        // Inicia drag (OnMouseDown já é para clique esquerdo - sem check extra)
+        isDragging = true;
+        Vector3 mousePos = cam.ScreenToWorldPoint(Input.mousePosition);
+        mousePos.z = 0;
+        dragOffset = transform.position - mousePos;
+        Debug.Log("🖱️ Iniciando drag da Tile " + (tile != null ? tile.tileId : "desconhecida") + " (ID atual: " + (tile != null ? tile.GetCurrentId() : "N/A") + ")");
     }
 
     void OnMouseOver()
@@ -84,24 +81,31 @@ public class TileController : MonoBehaviour
     {
         if (tile == null || cam == null || !isDragging) return;
 
-        if (Input.GetMouseButtonUp(0))
+        Vector3 mousePos = cam.ScreenToWorldPoint(Input.mousePosition);
+        mousePos.z = 0;
+
+        // **DEBUG SCORE: Log posição final antes de MoveTile**
+        Debug.Log("🔍 [DEBUG TILECONTROLLER] Finalizando drag: Posição mouse=" + mousePos + ", Tile ID=" + tile.tileId + ", CurrentCell anterior=" + tile.currentCell);
+
+        // Chama MoveTile com verificações de ocupação
+        bool success = tile.MoveTile(new Vector2(mousePos.x, mousePos.y));
+
+        // **DEBUG SCORE: Log resultado e cell final**
+        int finalCell = tile.currentCell; // Pega cell após MoveTile
+        Debug.Log("🔍 [DEBUG TILECONTROLLER] MoveTile retornou: " + success + ". Cell final=" + finalCell +
+                  (finalCell == 0 ? " (TESTE CELL 0! Verifique validação abaixo)" : "") +
+                  ". Se success=true e cell=0, score deve +1 se ID/flip bater.");
+
+        if (!success)
         {
-            Vector3 mousePos = cam.ScreenToWorldPoint(Input.mousePosition);
-            mousePos.z = 0;
-
-            // Chama MoveTile com verificações de ocupação
-            bool success = tile.MoveTile(new Vector2(mousePos.x, mousePos.y));
-
-            if (!success)
-            {
-                Debug.Log("❌ Drag finalizado sem sucesso para Tile " + tile.tileId);
-            }
-            else
-            {
-                Debug.Log("✅ Drag finalizado com sucesso para Tile " + tile.tileId);
-            }
-
-            isDragging = false;
+            Debug.Log("❌ Drag finalizado sem sucesso para Tile " + tile.tileId + " (possível célula ocupada ou inválida).");
         }
+        else
+        {
+            Debug.Log("✅ Drag finalizado com sucesso para Tile " + tile.tileId + " em cell " + finalCell +
+                      ". Aguardando logs de validação/score...");
+        }
+
+        isDragging = false;
     }
 }

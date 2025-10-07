@@ -11,6 +11,7 @@ public class Tile : MonoBehaviour
     public bool isFlipped = false;
     public bool ignoreFlip = false; // Flag: true para tiles simétricas (ignora flip na validação)
     public bool trackUsedId = false; // Flag: true se este ID deve ser marcado como usado após colocação correta (opcional)
+    private bool hasScoredInCurrentCell = false; // Evita pontos múltiplos na mesma célula correta
 
     [Header("Sprites da Tile")]
     public Sprite frontSprite;
@@ -67,6 +68,12 @@ public class Tile : MonoBehaviour
         currentRotation = (currentRotation + 90) % 360;
         Debug.Log("🔄 Tile " + tileId + " (Instância #" + instanceId + ") rotacionada para " + currentRotation +
                   " graus (ID atual: " + currentId + ")");
+
+        // **NOVA LÓGICA: Revalida se já está na grid (currentCell >= 0)**
+        if (currentCell >= 0)
+        {
+            RevalidatePlacement("após rotação");
+        }
     }
 
     public void FlipTile()
@@ -88,6 +95,50 @@ public class Tile : MonoBehaviour
         Debug.Log("🔄 Tile " + tileId + " (Instância #" + instanceId + ") flipada para " + face +
                   " (ID agora: " + currentId + ")" +
                   (ignoreFlip ? " (mas flip ignorado na validação)" : ""));
+
+        // **NOVA LÓGICA: Revalida se já está na grid (currentCell >= 0)**
+        if (currentCell >= 0)
+        {
+            RevalidatePlacement("após flip");
+        }
+    }
+
+    // **NOVO MÉTODO: Revalida colocação após rotate/flip (só se na grid e não pontuou ainda)**
+    private void RevalidatePlacement(string action)
+    {
+        AnimalSolution solution = AnimalSolution.Instance;
+        if (solution == null || currentCell < 0)
+        {
+            Debug.LogWarning("⚠️ [DEBUG SCORE] Revalidação ignorada: Solution null ou tile fora da grid (" + currentCell + ").");
+            return;
+        }
+
+        Debug.Log("🔍 [DEBUG SCORE] Revalidação " + action + " para Tile " + tileId + " (Instância #" + instanceId +
+                  ") em cell " + currentCell + " (ID atual=" + currentId + ", Flip=" + isFlipped + ", Rot=" + currentRotation + ")");
+
+        bool isCorrect = solution.IsCorrectPlacement(this);
+        Debug.Log("🔍 [DEBUG SCORE] Revalidação " + action + ": IsCorrectPlacement retornou " + isCorrect);
+
+        if (isCorrect && !hasScoredInCurrentCell)
+        {
+            int points = GameManager.Instance.scorePerCorrect;
+            GameManager.Instance.AddScore(points);
+            hasScoredInCurrentCell = true;
+            Debug.Log("✅ [DEBUG SCORE] Colocação agora correta " + action + "! + " + points + " ponto(s) adicionados para Tile " + tileId + " em cell " + currentCell);
+
+            // Opcional: Checa se puzzle completo após correção
+            GameManager.Instance.CheckPuzzleComplete();
+        }
+        else if (isCorrect)
+        {
+            Debug.Log("ℹ️ [DEBUG SCORE] Colocação correta " + action + ", mas já pontuou nesta célula (sem +pontos extras).");
+        }
+        else
+        {
+            Debug.Log("❌ [DEBUG SCORE] Colocação ainda incorreta após " + action + " - sem pontos.");
+            // Opcional: Se quiser resetar flag se virar errado (para permitir re-pontuar se corrigir de novo), descomente:
+            // hasScoredInCurrentCell = false;
+        }
     }
 
     public bool MoveTile(Vector2 position)
@@ -103,23 +154,24 @@ public class Tile : MonoBehaviour
         Vector2 snapPos = gridManager.GetNearestCell(position);
         int newCell = gridManager.GetCellIndex(snapPos);
 
-        // Se mesma célula, só atualiza posição (sem checks)
+        // **DEBUG SCORE: Log inicial do movimento**
+        Debug.Log("🔍 [DEBUG SCORE] Início MoveTile: Posição alvo=" + position + ", Snap=" + snapPos + ", NewCell=" + newCell + ", CurrentCell anterior=" + currentCell);
+
+        // Se mesma célula, só atualiza posição (sem checks ou pontos)
         if (newCell == currentCell)
         {
             transform.position = snapPos;
             previousPosition = snapPos;
             isMoving = false;
+            Debug.Log("⚠️ [DEBUG SCORE] Mesma célula - sem validação de score.");
             return true;
         }
 
-        // Verifica se nova célula está ocupada (reforçado: não permite mesmo se for a mesma tile)
+        // Verifica se nova célula está ocupada
         if (gridManager.IsCellOccupied(newCell))
         {
-            // Rollback imediato: volta para posição anterior (sem mudança de cor)
             transform.position = previousPosition;
-
-            Debug.Log("❌ Movimento rejeitado: Célula " + newCell + " ocupada. Tile " + tileId +
-                      " (Instância #" + instanceId + ", ID: " + currentId + ") voltou para célula " + currentCell);
+            Debug.Log("❌ [DEBUG SCORE] Movimento rejeitado: Célula " + newCell + " ocupada.");
             isMoving = false;
             return false;
         }
@@ -136,13 +188,35 @@ public class Tile : MonoBehaviour
             currentCell = newCell;
             isMoving = false;
 
-            // Verifica solução (se existir) - agora usa IsCorrect com suporte a duplicatas
+            // **IMPORTANTE: Reset flag de score ao MUDAR de célula (permite pontuar na nova)**
+            hasScoredInCurrentCell = false;
+
+            // **DEBUG SCORE: Estado da tile após movimento**
+            Debug.Log("✅ [DEBUG SCORE] Movimento OK: Tile " + tileId + " (ID=" + currentId + ", Flip=" + isFlipped + ", Rot=" + currentRotation + ") em célula " + currentCell);
+
+            // Verifica solução (validação inicial na nova célula)
             AnimalSolution solution = AnimalSolution.Instance;
-            if (solution != null && solution.IsCorrectPlacement(this))
+            if (solution != null)
             {
-                GameManager.Instance.AddScore(10); // Usa singleton para otimizar
-                Debug.Log("✅ Colocação correta! Pontos adicionados para Tile " + tileId +
-                          " (Instância #" + instanceId + ", ID: " + currentId + ")");
+                Debug.Log("🔍 [DEBUG SCORE] Chamando IsCorrectPlacement para célula " + currentCell);
+                bool isCorrect = solution.IsCorrectPlacement(this);
+                Debug.Log("🔍 [DEBUG SCORE] IsCorrectPlacement retornou: " + isCorrect);
+
+                if (isCorrect && !hasScoredInCurrentCell)
+                {
+                    int points = GameManager.Instance.scorePerCorrect;
+                    GameManager.Instance.AddScore(points);
+                    hasScoredInCurrentCell = true;
+                    Debug.Log("✅ [DEBUG SCORE] Colocação correta! + " + points + " ponto(s) adicionados.");
+                }
+                else if (!isCorrect)
+                {
+                    Debug.Log("❌ [DEBUG SCORE] Validação falhou - sem pontos.");
+                }
+            }
+            else
+            {
+                Debug.LogError("❌ [DEBUG SCORE] AnimalSolution.Instance é NULL - score não pode ser adicionado!");
             }
 
             Debug.Log("✅ Tile " + tileId + " (Instância #" + instanceId + ", ID: " + currentId + ") movida para célula " + newCell);
@@ -150,13 +224,10 @@ public class Tile : MonoBehaviour
         }
         else
         {
-            // Rollback se falhou na ocupação (raro, mas possível)
             if (currentCell >= 0)
-                gridManager.OccupyCell(currentCell, this); // Re-ocupa anterior
+                gridManager.OccupyCell(currentCell, this);
             transform.position = previousPosition;
-
-            Debug.Log("❌ Falha na ocupação da célula " + newCell + ". Tile " + tileId +
-                      " (Instância #" + instanceId + ", ID: " + currentId + ") voltou para anterior.");
+            Debug.Log("❌ [DEBUG SCORE] Falha na ocupação da célula " + newCell);
             isMoving = false;
             return false;
         }
@@ -165,7 +236,11 @@ public class Tile : MonoBehaviour
     // Atualizada: Suporte a duplicatas - aceita se ID bater, mas checa se permite duplicatas ou se já usado
     public bool IsCorrect(TileData expected)
     {
-        if (expected == null) return false;
+        if (expected == null)
+        {
+            Debug.LogError("❌ [DEBUG SCORE] Expected é NULL em IsCorrect!");
+            return false;
+        }
 
         // Verificações básicas
         bool cellMatch = currentCell == expected.correctCell;
@@ -188,7 +263,6 @@ public class Tile : MonoBehaviour
         bool duplicateCheck = true;
         if (!expected.allowDuplicates && trackUsedId)
         {
-            // Chama método global para checar se ID já foi usado
             duplicateCheck = !AnimalSolution.Instance.IsIdUsed(currentId);
             if (!duplicateCheck)
             {
@@ -199,13 +273,11 @@ public class Tile : MonoBehaviour
 
         bool isCorrect = cellMatch && rotationMatch && flipMatch && idMatch && duplicateCheck;
 
-        Debug.Log("🔍 Verificando Tile " + tileId + " (Instância #" + instanceId + ", ID atual: " + currentId + "): " +
-                  "Célula: " + (cellMatch ? "OK" : "ERR") +
-                  ", Rotação: " + (rotationMatch ? "OK" : "ERR") +
-                  ", Flip: " + (flipMatch ? "OK" : (ignoreFlip ? "IGNORADO" : "ERR")) +
-                  ", ID Face: " + (idMatch ? "OK" : "ERR") +
-                  ", Duplicata: " + (duplicateCheck ? "OK" : "USADO") +
-                  " → " + (isCorrect ? "Correta!" : "Incorreta."));
+        // **DEBUG SCORE: Log detalhado de cada checagem**
+        Debug.Log("🔍 [DEBUG SCORE] IsCorrect para Tile " + tileId + " (ID atual=" + currentId + ", Cell atual=" + currentCell + ", Flip atual=" + isFlipped + ", Rot atual=" + currentRotation +
+                  ") vs Expected (ID=" + expected.requiredTileId + ", Cell=" + expected.correctCell + ", Flip=" + expected.isFlipped + ", Rot=" + expected.correctRotation + "): " +
+                  "CellMatch=" + cellMatch + ", IDMatch=" + idMatch + ", FlipMatch=" + flipMatch + ", RotMatch=" + rotationMatch + ", DupCheck=" + duplicateCheck +
+                  " → RESULTADO=" + isCorrect);
 
         return isCorrect;
     }
