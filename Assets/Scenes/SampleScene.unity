@@ -424,6 +424,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 21300000, guid: 66adecc305833b849904bb0a5e3c6581, type: 3}
     - target: {fileID: 8797867372019447012, guid: 3bdc2c676dd3d1a4794f0c5572d138c0, type: 3}
+      propertyPath: ignoreFlip
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8797867372019447012, guid: 3bdc2c676dd3d1a4794f0c5572d138c0, type: 3}
       propertyPath: currentCell
       value: -1
       objectReference: {fileID: 0}
@@ -658,6 +662,10 @@ PrefabInstance:
       propertyPath: backSprite
       value: 
       objectReference: {fileID: 21300000, guid: df371d09318cf524db41114f60b1707f, type: 3}
+    - target: {fileID: 8797867372019447012, guid: 3bdc2c676dd3d1a4794f0c5572d138c0, type: 3}
+      propertyPath: ignoreFlip
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 8797867372019447012, guid: 3bdc2c676dd3d1a4794f0c5572d138c0, type: 3}
       propertyPath: currentCell
       value: -1
@@ -1261,9 +1269,17 @@ PrefabInstance:
       value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8797867372019447012, guid: 3bdc2c676dd3d1a4794f0c5572d138c0, type: 3}
+      propertyPath: isFlipped
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 8797867372019447012, guid: 3bdc2c676dd3d1a4794f0c5572d138c0, type: 3}
       propertyPath: backSprite
       value: 
       objectReference: {fileID: 21300000, guid: 646a81b1ea8462b44b750b1d82a6ab71, type: 3}
+    - target: {fileID: 8797867372019447012, guid: 3bdc2c676dd3d1a4794f0c5572d138c0, type: 3}
+      propertyPath: ignoreFlip
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 8797867372019447012, guid: 3bdc2c676dd3d1a4794f0c5572d138c0, type: 3}
       propertyPath: currentCell
       value: -1

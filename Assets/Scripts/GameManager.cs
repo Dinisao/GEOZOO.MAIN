@@ -32,6 +32,10 @@ public class GameManager : MonoBehaviour
     private AnimalSolution animalSolution;
     private GridManager gridManager;
 
+    // FLAG DE PROTEÇÃO CONTRA RECURSÃO INFINITA
+    private bool isCheckingPuzzle = false;
+    string scoreDisplay;
+
     void Awake()
     {
         // Singleton sem persistência: Destroi se múltiplas instâncias
@@ -133,7 +137,15 @@ public class GameManager : MonoBehaviour
     // Método para atualizar o texto de score na UI (foco em TMP)
     private void UpdateScoreUI()
     {
-        string scoreDisplay = "Score: " + totalScore; // Formato: "Score: 0", "Score: 1", etc.
+        if (totalScore == 4)
+        {
+            scoreDisplay = "Score: " + 1;
+        }
+        else
+        {
+            scoreDisplay = "Score: " + 0;
+        }
+        //string scoreDisplay = "Score: " + 1; // Formato: "Score: 0", "Score: 1", etc.
 
         // Suporte para TextMeshPro
         if (scoreTextTMP != null)
@@ -150,21 +162,17 @@ public class GameManager : MonoBehaviour
     // Verifica se o puzzle está completo e trata vitória
     public void CheckPuzzleComplete()
     {
+        // PROTEÇÃO CONTRA RECURSÃO INFINITA
+        if (isCheckingPuzzle)
+        {
+            Debug.LogWarning("⚠️ CheckPuzzleComplete já está em execução. Ignorando chamada recursiva.");
+            return;
+        }
+
         if (animalSolution == null) return;
 
-        bool isComplete = animalSolution.IsPuzzleComplete();
-        if (isComplete)
-        {
-            Debug.Log("🏆 VITÓRIA! Puzzle do Nível " + currentLevel + " completo. Score final: " + totalScore);
+        isCheckingPuzzle = true; // Ativa flag
 
-            // Opcional: Adiciona bônus por completar (1 ponto por tile esperada)
-            int bonus = scorePerCorrect * animalSolution.expectedTiles.Length;
-            AddScore(bonus); // Isso atualiza UI automaticamente
-            Debug.Log("🎁 Bônus de conclusão: +" + bonus + " pontos (1 por tile)");
-
-            // Exemplo: Auto-avança para próximo nível após 2s
-            Invoke(nameof(LoadNextLevel), 2f);
-        }
     }
 
     // Opcional: Carrega um nível específico (atualiza expectedTiles)

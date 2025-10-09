@@ -13,8 +13,8 @@ public class GridManager : MonoBehaviour
     }
 
     [Header("Configurações do Grid")]
-    public int columns = 3;
-    public int rows = 4;
+    public int columns = 2;
+    public int rows = 2;
     public float cellSize = 2f;
     public Vector2 origin = new Vector2(-2f, -3f);
 
